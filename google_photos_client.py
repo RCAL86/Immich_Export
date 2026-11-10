@@ -195,25 +195,48 @@ class GooglePhotosClient:
         return {}
 
     def add_media_to_album(self, album_id: str, media_item_ids: List[str]):
-        """Adiciona itens de mídia já existentes a um álbum específico em lotes de até 50."""
+        """
+        Adiciona itens de mídia a um álbum no Google Fotos em lotes de até 50.
+        Em caso de erro 400 (ex: fotos/vídeos que o usuário apagou do Google Fotos),
+        utiliza divisão recursiva (divide-and-conquer) para isolar e ignorar os IDs
+        excluídos, garantindo que 100% dos itens válidos sejam vinculados ao álbum!
+        """
         if not media_item_ids:
             return
-        headers = {"Content-Type": "application/json"}
+
+        def _add_chunk(chunk: List[str]):
+            if not chunk:
+                return
+            headers = {"Content-Type": "application/json"}
+            payload = {"mediaItemIds": chunk}
+            try:
+                self._request_with_retry(
+                    "POST",
+                    f"https://photoslibrary.googleapis.com/v1/albums/{album_id}:batchAddMediaItems",
+                    headers=headers,
+                    json=payload,
+                    timeout=60
+                )
+            except requests.exceptions.HTTPError as e:
+                # Se for 400 (contém item apagado do Google Fotos)
+                if e.response is not None and e.response.status_code == 400:
+                    if len(chunk) == 1:
+                        # Este item foi deletado pelo usuário do Google Fotos, ignora
+                        return
+                    time.sleep(0.5)
+                    mid = len(chunk) // 2
+                    _add_chunk(chunk[:mid])
+                    _add_chunk(chunk[mid:])
+                else:
+                    raise e
+
         batch_size = 50
         for i in range(0, len(media_item_ids), batch_size):
             batch = media_item_ids[i:i + batch_size]
-            payload = {
-                "mediaItemIds": batch
-            }
-            self._request_with_retry(
-                "POST",
-                f"https://photoslibrary.googleapis.com/v1/albums/{album_id}:batchAddMediaItems",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
+            _add_chunk(batch)
             if len(media_item_ids) > batch_size:
                 time.sleep(1.0)
+
 
 
 
