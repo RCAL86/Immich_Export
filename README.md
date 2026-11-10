@@ -38,7 +38,7 @@ Se você já tentou exportar fotos do Immich ou de pastas locais para o Google F
 
 ```bash
 # Clone o repositório
-git clone https://github.com/SEU-USUARIO/Immich_Export.git
+git clone https://github.com/RCAL86/Immich_Export.git
 cd Immich_Export
 
 # Crie e ative o ambiente virtual (Windows PowerShell)
@@ -129,18 +129,22 @@ Basta executar o script principal:
 
 Você verá o painel interativo:
 ```text
-┌───────────────────────────────┐
+┌─────────────────────────────────┐
 │ Immich ➔ Google Photos Migrator │
-└───────────────────────────────┘
-1. Iniciar Sincronização / Migração
+└─────────────────────────────────┘
+1. Iniciar Sincronização / Migração Completa
 2. Testar Conexões (Immich e Google Fotos)
 3. Ver Status e Progresso Atual
-4. Resetar Vídeos no Banco (para reenviar com datas corrigidas)
-5. Sair
+4. Organizar Álbuns Agora (vincular fotos aos álbuns sem re-upload)
+5. Resetar Vídeos no Banco (para reenviar com datas corrigidas)
+6. Sair
 ```
 
-1. **Opção 2 (Testar Conexões):** Valida se o Immich e as credenciais do Google estão respondendo.
-2. **Opção 1 (Iniciar Sincronização):** Na primeira execução, o script abrirá automaticamente uma aba no seu navegador solicitando que você faça login na sua conta Google e aprove a permissão. Após autorizar, o token persistente é salvo localmente em `token.json` e a migração começa!
+1. **Opção 1 (Sincronização Completa):** Faz tudo no automático! Lê álbuns, ajusta datas, faz streaming de cada arquivo e registra diretamente nos álbuns do Google Fotos.
+2. **Opção 2 (Testar Conexões):** Valida se o Immich e as credenciais do Google estão respondendo.
+3. **Opção 3 (Ver Status):** Exibe a contagem e porcentagem em tempo real.
+4. **Opção 4 (Organizar Álbuns):** Vincula fotos que já estão no Google Fotos aos seus álbuns correspondentes sem baixar nem subir nenhum arquivo novamente.
+5. **Opção 5 (Resetar Vídeos):** Caso queira reenviar apenas vídeos para calibrar datas.
 
 ### Comandos Rápidos via Linha de Comando (CLI)
 
