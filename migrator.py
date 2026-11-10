@@ -150,6 +150,7 @@ class ImmichToGooglePhotosMigrator:
 
         immich_stats = self.immich.get_statistics()
         total_in_immich = immich_stats.get("total", 0)
+        initial_uploaded = self.db.get_stats().get("uploaded_assets", 0)
 
         processed = 0
         skipped = 0
@@ -173,12 +174,12 @@ class ImmichToGooglePhotosMigrator:
                     })
                 continue
 
-            current_done = skipped + processed
+            current_total_done = initial_uploaded + processed
             if total_in_immich > 0:
-                pct = (current_done / total_in_immich) * 100
-                prefix = f"[{current_done + 1}/{total_in_immich} | {pct:.1f}%]"
+                pct = (current_total_done / total_in_immich) * 100
+                prefix = f"[{current_total_done + 1}/{total_in_immich} | {pct:.1f}%]"
             else:
-                prefix = f"[{current_done + 1}]"
+                prefix = f"[{current_total_done + 1}]"
 
             try:
                 if log_fn:
