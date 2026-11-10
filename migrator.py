@@ -81,7 +81,61 @@ class ImmichToGooglePhotosMigrator:
 
         return asset_to_google_albums
 
+    def populate_albums(self, log_fn: Optional[Callable[[str], None]] = None):
+        """
+        Vincula todas as fotos já enviadas aos seus respectivos álbuns no Google Fotos,
+        sem precisar fazer upload de nada novamente!
+        """
+        if log_fn:
+            log_fn("🔍 Mapeando fotos já enviadas no banco local...")
+        asset_map = self.db.get_all_asset_mappings()
+        if log_fn:
+            log_fn(f"📦 {len(asset_map)} fotos mapeadas com ID do Google Fotos.")
+
+        immich_albums = self.immich.get_all_albums()
+        if log_fn:
+            log_fn(f"📁 Processando {len(immich_albums)} álbuns do Immich...")
+
+        for alb in immich_albums:
+            alb_id = alb.get("id")
+            alb_name = alb.get("albumName") or "Sem Nome"
+            google_alb_id = self.db.get_google_album_id(alb_id)
+            if not google_alb_id:
+                try:
+                    google_alb_id = self.google_photos.create_album(alb_name)
+                    self.db.record_album(alb_id, alb_name, google_alb_id)
+                    time.sleep(2.0)
+                except Exception as e:
+                    if log_fn:
+                        log_fn(f"❌ Erro ao criar álbum '{alb_name}': {e}")
+                    continue
+
+            # Obter assets do álbum
+            alb_assets = self.immich.get_album_assets(alb_id)
+            media_ids_to_add = []
+            for a in alb_assets:
+                a_id = a.get("id")
+                if a_id in asset_map:
+                    media_ids_to_add.append(asset_map[a_id])
+
+            if media_ids_to_add:
+                if log_fn:
+                    log_fn(f"📁 Vinculando {len(media_ids_to_add)} fotos ao álbum: '{alb_name}'...")
+                try:
+                    self.google_photos.add_media_to_album(google_alb_id, media_ids_to_add)
+                    if log_fn:
+                        log_fn(f"✔ Álbum '{alb_name}' sincronizado com sucesso!")
+                except Exception as e:
+                    if log_fn:
+                        log_fn(f"❌ Falha ao vincular fotos ao álbum '{alb_name}': {e}")
+            else:
+                if log_fn:
+                    log_fn(f"ℹ️ Álbum '{alb_name}': nenhuma foto deste álbum foi enviada ainda.")
+
+            time.sleep(1.0)
+
     def run_migration(
+
         self,
         on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
         log_fn: Optional[Callable[[str], None]] = None
@@ -200,5 +254,12 @@ class ImmichToGooglePhotosMigrator:
                     })
 
         if log_fn:
-            log_fn(f"🎉 Migração finalizada! Transferidos: {processed}, Já existentes (ignorados): {skipped}, Falhas: {errors}")
+            log_fn(f"🎉 Migração de arquivos finalizada! Transferidos: {processed}, Já existentes: {skipped}, Falhas: {errors}")
+
+        # Vincula todas as fotos enviadas aos seus álbuns correspondentes no Google Fotos
+        if self.sync_albums:
+            if log_fn:
+                log_fn("📁 Organizando e vinculando fotos aos álbuns no Google Fotos...")
+            self.populate_albums(log_fn=log_fn)
+
 

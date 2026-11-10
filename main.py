@@ -158,6 +158,39 @@ def run_sync():
         console.print(f"[bold red]Erro crítico na execução:[/bold red] {e}")
 
 
+def run_sync_albums():
+    config = get_config()
+    if not config["immich_url"] or not config["immich_key"]:
+        console.print("[red]❌ Configure o IMMICH_URL e IMMICH_API_KEY no arquivo .env![/red]")
+        return
+    if not os.path.exists(config["creds_file"]) and not os.path.exists("token.json"):
+        console.print(f"[red]❌ O arquivo '{config['creds_file']}' precisa estar presente na pasta![/red]")
+        return
+
+    try:
+        def log_message(msg: str):
+            console.print(msg)
+
+        immich = ImmichClient(config["immich_url"], config["immich_key"])
+        google_photos = GooglePhotosClient(config["creds_file"], log_fn=log_message)
+        db = MigrationDB()
+
+        migrator = ImmichToGooglePhotosMigrator(
+            immich=immich,
+            google_photos=google_photos,
+            db=db,
+            sync_albums=True,
+            inject_exif=False,
+            request_delay=config["request_delay"]
+        )
+
+        console.print(Panel.fit("[bold green]Organizando e Vinculando Fotos aos Álbuns do Google Fotos[/bold green]\n[yellow]Isso não faz re-upload de nenhum arquivo![/yellow]"))
+        migrator.populate_albums(log_fn=log_message)
+        console.print("[bold green]✔ Todos os álbuns foram organizados com sucesso no Google Fotos![/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]Erro ao sincronizar álbuns:[/bold red] {e}")
+
+
 def reset_videos():
     db = MigrationDB()
     if Confirm.ask("[bold yellow]Deseja resetar o status de todos os vídeos enviados no banco local para que sejam reenviados com a data corrigida?[/bold yellow]"):
@@ -175,13 +208,14 @@ def interactive_menu():
             border_style="cyan"
         ))
 
-        console.print("1. [green]Iniciar Sincronização / Migração[/green]")
+        console.print("1. [green]Iniciar Sincronização / Migração Completa[/green]")
         console.print("2. [yellow]Testar Conexões (Immich e Google Fotos)[/yellow]")
         console.print("3. [blue]Ver Status e Progresso Atual[/blue]")
-        console.print("4. [magenta]Resetar Vídeos no Banco (para reenviar com datas corrigidas)[/magenta]")
-        console.print("5. [red]Sair[/red]")
+        console.print("4. [bold cyan]Organizar Álbuns Agora (vincular fotos aos álbuns sem re-upload)[/bold cyan]")
+        console.print("5. [magenta]Resetar Vídeos no Banco (para reenviar com datas corrigidas)[/magenta]")
+        console.print("6. [red]Sair[/red]")
 
-        choice = Prompt.ask("\nEscolha uma opção", choices=["1", "2", "3", "4", "5"], default="1")
+        choice = Prompt.ask("\nEscolha uma opção", choices=["1", "2", "3", "4", "5", "6"], default="1")
 
         if choice == "1":
             run_sync()
@@ -190,15 +224,17 @@ def interactive_menu():
         elif choice == "3":
             show_status()
         elif choice == "4":
-            reset_videos()
+            run_sync_albums()
         elif choice == "5":
+            reset_videos()
+        elif choice == "6":
             console.print("[dim]Até logo![/dim]")
             break
 
 
 def main():
     parser = argparse.ArgumentParser(description="Immich to Google Photos Direct Migrator")
-    parser.add_argument("command", nargs="?", choices=["sync", "test", "status", "reset-videos", "menu"], default="menu",
+    parser.add_argument("command", nargs="?", choices=["sync", "test", "status", "sync-albums", "reset-videos", "menu"], default="menu",
                         help="Comando a ser executado (padrão: menu interativo)")
     args = parser.parse_args()
 
@@ -208,10 +244,13 @@ def main():
         test_connections()
     elif args.command == "status":
         show_status()
+    elif args.command == "sync-albums":
+        run_sync_albums()
     elif args.command == "reset-videos":
         reset_videos()
     else:
         interactive_menu()
+
 
 
 

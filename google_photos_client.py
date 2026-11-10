@@ -195,19 +195,25 @@ class GooglePhotosClient:
         return {}
 
     def add_media_to_album(self, album_id: str, media_item_ids: List[str]):
-        """Adiciona itens de mídia já existentes a um álbum específico."""
+        """Adiciona itens de mídia já existentes a um álbum específico em lotes de até 50."""
         if not media_item_ids:
             return
         headers = {"Content-Type": "application/json"}
-        payload = {
-            "mediaItemIds": media_item_ids
-        }
-        self._request_with_retry(
-            "POST",
-            f"https://photoslibrary.googleapis.com/v1/albums/{album_id}:batchAddMediaItems",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
+        batch_size = 50
+        for i in range(0, len(media_item_ids), batch_size):
+            batch = media_item_ids[i:i + batch_size]
+            payload = {
+                "mediaItemIds": batch
+            }
+            self._request_with_retry(
+                "POST",
+                f"https://photoslibrary.googleapis.com/v1/albums/{album_id}:batchAddMediaItems",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+            if len(media_item_ids) > batch_size:
+                time.sleep(1.0)
+
 
 

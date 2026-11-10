@@ -71,6 +71,14 @@ class MigrationDB:
             row = cursor.fetchone()
             return row["google_album_id"] if row else None
 
+    def get_all_asset_mappings(self) -> Dict[str, str]:
+        """Retorna um dicionário mapeando immich asset_id -> google_media_item_id."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT asset_id, google_media_item_id FROM synced_assets WHERE status = 'uploaded' AND google_media_item_id IS NOT NULL AND google_media_item_id != ''")
+            return {row["asset_id"]: row["google_media_item_id"] for row in cursor.fetchall()}
+
+
     def record_album(self, immich_album_id: str, album_name: str, google_album_id: str):
         with self._get_connection() as conn:
             cursor = conn.cursor()

@@ -152,6 +152,10 @@ Você verá o painel interativo:
   ```powershell
   .\venv\Scripts\python main.py status
   ```
+- **Vincular fotos aos álbuns no Google Fotos (sem re-upload):**
+  ```powershell
+  .\venv\Scripts\python main.py sync-albums
+  ```
 - **Testar conectividade com ambas as APIs:**
   ```powershell
   .\venv\Scripts\python main.py test

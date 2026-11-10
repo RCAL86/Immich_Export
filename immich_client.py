@@ -75,11 +75,50 @@ class ImmichClient:
         res.raise_for_status()
         return res.json()
 
+    def get_album_assets(self, album_id: str) -> List[Dict[str, Any]]:
+        """
+        Retorna a lista de assets contidos em um álbum.
+        No Immich v3, os assets do álbum são obtidos via POST /search/metadata com albumIds.
+        """
+        page = 1
+        page_size = 500
+        all_assets = []
+        while True:
+            payload = {
+                "albumIds": [album_id],
+                "size": page_size,
+                "page": page
+            }
+            res = self.session.post(self._url("search/metadata"), json=payload, timeout=30)
+            if res.status_code != 200:
+                break
+            data = res.json()
+            items = []
+            if isinstance(data, dict):
+                items = data.get("assets", {}).get("items", [])
+            elif isinstance(data, list):
+                items = data
+
+            if not items:
+                break
+
+            all_assets.extend(items)
+            if len(items) < page_size:
+                break
+            page += 1
+
+        return all_assets
+
     def get_album_details(self, album_id: str) -> Dict[str, Any]:
         """Obtém detalhes do álbum, incluindo a lista de assets nele contidos."""
         res = self.session.get(self._url(f"albums/{album_id}"), timeout=30)
         res.raise_for_status()
-        return res.json()
+        details = res.json()
+        # No Immich v3, GET /api/albums/{id} não retorna mais 'assets'. Buscamos via get_album_assets:
+        if "assets" not in details or not details["assets"]:
+            details["assets"] = self.get_album_assets(album_id)
+        return details
+
 
     def get_all_assets(self, page_size: int = 250) -> Generator[Dict[str, Any], None, None]:
         """
