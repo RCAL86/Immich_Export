@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Google OAuth Credentials & Tokens
+credentials.json
+token.json
+
+# Local Database & Migration State
+migration.db
+*.sqlite
+*.log
+
