@@ -197,6 +197,19 @@ Durante a transferência, cada linha exibe o contador e a porcentagem:
 
 ---
 
+## 💡 Dicas e Perguntas Frequentes (FAQ)
+
+### 1. Por que algumas fotos aparecem agrupadas no dia de hoje?
+- **Verifique a aba em que está olhando:** No Google Fotos, se você acessar a busca por *Adicionados Recentemente* (`photos.google.com/search/_tra_`), ele listará as mídias em ordem de upload. Para ver a organização cronológica real, acesse a aba principal **"Fotos" (Linha do Tempo)**.
+- **Arquivos `.gif` (Animações):** O padrão técnico do formato GIF (criado em 1989) não possui especificação para cabeçalhos EXIF de câmera. Por isso, a API do Google Fotos é obrigada a atribuir a data do upload para arquivos `.gif`. Você pode ajustar essas poucas animações manualmente na web selecionando-as e clicando no lápis (*Editar data e hora*).
+
+### 2. O que acontece se a cota diária de 10.000 requisições for atingida?
+- O Google Cloud limita projetos gratuitos a 10.000 chamadas por dia.
+- O script identifica isso automaticamente e entra em **pausa programada** com contagem regressiva, retomando sozinho às **05:05 BRT** (quando o Google reseta o contador diário à meia-noite PST).
+- Caso queira continuar imediatamente sem esperar, basta criar um novo projeto no Google Cloud Console e substituir o `credentials.json`.
+
+---
+
 ## 🔒 Segurança e Privacidade
 
 - **Permissões Mínimas (`photoslibrary.appendonly`):** O aplicativo solicita ao Google exclusivamente a permissão de **adicionar** novos itens e álbuns. Ele **não pode ler, apagar ou modificar** fotos pré-existentes na sua conta Google.
