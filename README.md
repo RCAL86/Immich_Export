@@ -19,7 +19,10 @@ Se você já tentou exportar fotos do Immich ou de pastas locais para o Google F
   - Em **vídeos (`.mp4`, `.mov`, `.3gp`)**: Injeta a data original nos átomos internos do contêiner QuickTime (`mvhd`, `tkhd`, `mdhd`). O Google Fotos lê esses cabeçalhos e posiciona os vídeos no dia e ano exatos!
   - Em **fotos (`.jpg`, `.jpeg`, etc.)**: Força a gravação de `DateTimeOriginal`, `DateTimeDigitized` e coordenadas GPS no cabeçalho EXIF com base nos dados do Immich.
 - **Resiliente com Retomada Automática (SQLite):** Cada envio bem-sucedido é gravado no banco local `migration.db`. Se a conexão cair ou você parar com `Ctrl + C`, ele retoma de onde parou sem reenviar nada repetido.
-- **Backoff Exponencial (Anti-429):** Gerencia automaticamente pausas estratégicas e retentativas caso o Google acione limites temporários por minuto.
+- **Gestão Inteligente de Cotas (Anti-429 & Auto-Sleep):** 
+  - Se houver limite temporário por minuto, aplica backoff exponencial automático.
+  - Se atingir o **limite diário de 10.000 requisições** do Google, o script entra em pausa programada com contagem regressiva e **retoma a transferência 100% sozinho às 05:05 da manhã** (quando o Google renova a cota diária), sem perder o progresso e sem fechar a aplicação!
+
 
 ---
 
