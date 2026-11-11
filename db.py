@@ -123,4 +123,14 @@ class MigrationDB:
             conn.commit()
             return deleted
 
+    def reset_failed_assets(self) -> int:
+        """Limpa registros com falha para permitir que sejam tentados novamente."""
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM synced_assets WHERE status = 'failed'")
+            deleted = cursor.rowcount
+            conn.commit()
+            return deleted
+
+
 

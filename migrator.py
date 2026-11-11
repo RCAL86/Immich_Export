@@ -1,8 +1,9 @@
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Callable, Optional, Dict, List, Any
 from db import MigrationDB
 from immich_client import ImmichClient
-from google_photos_client import GooglePhotosClient
+from google_photos_client import GooglePhotosClient, DailyQuotaExceededError
 from exif_injector import inject_media_metadata
 
 
@@ -134,8 +135,40 @@ class ImmichToGooglePhotosMigrator:
 
             time.sleep(1.0)
 
-    def run_migration(
+    def wait_for_daily_quota(self, log_fn: Optional[Callable[[str], None]] = None):
+        """
+        Calcula o tempo até a renovação da cota diária do Google (00:05 PST / 05:05 BRT)
+        e entra em contagem regressiva, retomando a execução automaticamente sem fechar o programa!
+        """
+        now_utc = datetime.now(timezone.utc)
+        target_utc = now_utc.replace(hour=8, minute=5, second=0, microsecond=0)
+        if target_utc <= now_utc:
+            target_utc += timedelta(days=1)
 
+        diff = target_utc - now_utc
+        total_secs = int(diff.total_seconds())
+        mins = total_secs // 60
+        secs = total_secs % 60
+
+        if log_fn:
+            log_fn(
+                f"\n🛑 [COTA DIÁRIA ATINGIDA] O Google limitou a 10.000 requisições diárias para este projeto.\n"
+                f"⏰ [PAUSA PROGRAMADA ATIVADA] Aguardando renovação da cota às 05:05 (restam {mins}m {secs}s)...\n"
+                f"💤 O script ficará em repouso e retomará o envio sozinho assim que o Google liberar a cota!\n"
+            )
+
+        while total_secs > 0:
+            sleep_chunk = min(60, total_secs)
+            time.sleep(sleep_chunk)
+            total_secs -= sleep_chunk
+            if total_secs > 0 and (total_secs % 300 == 0 or total_secs <= 120):
+                if log_fn:
+                    log_fn(f"⏳ [Aguardando Renovação do Google] Restam {total_secs // 60}m {total_secs % 60}s para continuar...")
+
+        if log_fn:
+            log_fn("\n🌅 [COTA RENOVADA PELO GOOGLE] Horário atingido! Retomando a transferência automaticamente agora...\n")
+
+    def run_migration(
         self,
         on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
         log_fn: Optional[Callable[[str], None]] = None
@@ -144,6 +177,9 @@ class ImmichToGooglePhotosMigrator:
         Executa o processo completo de migração via streaming (sem salvar gigabytes localmente).
         """
         asset_album_map = self.prepare_albums(log_fn)
+
+        # Limpa eventuais falhas temporárias anteriores para que sejam retentadas
+        self.db.reset_failed_assets()
 
         if log_fn:
             log_fn("🚀 Iniciando varredura e transferência dos arquivos do Immich...")
@@ -181,87 +217,86 @@ class ImmichToGooglePhotosMigrator:
             else:
                 prefix = f"[{current_total_done + 1}]"
 
-            try:
-                if log_fn:
-                    log_fn(f"{prefix} ⬇️ Baixando: {filename}...")
-                file_bytes = self.immich.download_asset_bytes(asset_id)
-
-                # Injeta EXIF ou QuickTime MP4 para garantir a linha do tempo e GPS no Google Fotos
-                if self.inject_exif:
-                    file_bytes = inject_media_metadata(file_bytes, asset, filename)
-
-                # Upload dos bytes
-                if log_fn:
-                    log_fn(f"{prefix} ⬆️ Enviando para o Google Fotos: {filename}...")
-                upload_token = self.google_photos.upload_bytes(file_bytes, filename)
-
-                # Determina os álbuns de destino
-                target_albums = asset_album_map.get(asset_id, [])
-                primary_album = target_albums[0] if target_albums else None
-                desc = (asset.get("exifInfo") or {}).get("description") or ""
-
-                # Registra na biblioteca e no álbum primário
-                media_item = self.google_photos.batch_create_media_item(
-                    upload_token=upload_token,
-                    filename=filename,
-                    description=desc,
-                    album_id=primary_album
-                )
-                google_id = media_item.get("id", "")
-
-                # Se a foto estiver em mais de um álbum, vincula aos demais
-                if len(target_albums) > 1 and google_id:
-                    for extra_album in target_albums[1:]:
-                        try:
-                            self.google_photos.add_media_to_album(extra_album, [google_id])
-                        except Exception as e:
-                            if log_fn:
-                                log_fn(f"⚠️ Erro ao vincular ao álbum adicional: {e}")
-
-                # Salva sucesso no banco local SQLite
-                self.db.mark_asset_synced(asset_id, filename, google_id)
-                processed += 1
-
-                if on_progress:
-                    on_progress({
-                        "status": "uploaded",
-                        "asset_id": asset_id,
-                        "filename": filename,
-                        "processed": processed,
-                        "skipped": skipped,
-                        "errors": errors
-                    })
-
-                # Pausa para respeitar as quotas de requisições por minuto do Google Fotos
-                if self.request_delay > 0:
-                    time.sleep(self.request_delay)
-
-            except Exception as e:
-                error_msg = str(e)
-                if "per day" in error_msg.lower():
+            while True:
+                try:
                     if log_fn:
-                        log_fn(
-                            "\n⏸️ [PAUSA AUTOMÁTICA] Limite diário de requisições do Google atingido.\n"
-                            "   Tudo o que já foi enviado está 100% seguro no banco de dados.\n"
-                            "   Assim que a cota renovar pelo Google (ou trocando o credentials.json), basta rodar 'python main.py sync' para continuar exatamente de onde parou!"
-                        )
+                        log_fn(f"{prefix} ⬇️ Baixando: {filename}...")
+                    file_bytes = self.immich.download_asset_bytes(asset_id)
+
+                    # Injeta EXIF ou QuickTime MP4 para garantir a linha do tempo e GPS no Google Fotos
+                    if self.inject_exif:
+                        file_bytes = inject_media_metadata(file_bytes, asset, filename)
+
+                    # Upload dos bytes
+                    if log_fn:
+                        log_fn(f"{prefix} ⬆️ Enviando para o Google Fotos: {filename}...")
+                    upload_token = self.google_photos.upload_bytes(file_bytes, filename)
+
+                    # Determina os álbuns de destino
+                    target_albums = asset_album_map.get(asset_id, [])
+                    primary_album = target_albums[0] if target_albums else None
+                    desc = (asset.get("exifInfo") or {}).get("description") or ""
+
+                    # Registra na biblioteca e no álbum primário
+                    media_item = self.google_photos.batch_create_media_item(
+                        upload_token=upload_token,
+                        filename=filename,
+                        description=desc,
+                        album_id=primary_album
+                    )
+                    google_id = media_item.get("id", "")
+
+                    # Se a foto estiver em mais de um álbum, vincula aos demais
+                    if len(target_albums) > 1 and google_id:
+                        for extra_album in target_albums[1:]:
+                            try:
+                                self.google_photos.add_media_to_album(extra_album, [google_id])
+                            except Exception as e:
+                                if log_fn:
+                                    log_fn(f"⚠️ Erro ao vincular ao álbum adicional: {e}")
+
+                    # Salva sucesso no banco local SQLite
+                    self.db.mark_asset_synced(asset_id, filename, google_id)
+                    processed += 1
+
+                    if on_progress:
+                        on_progress({
+                            "status": "uploaded",
+                            "asset_id": asset_id,
+                            "filename": filename,
+                            "processed": processed,
+                            "skipped": skipped,
+                            "errors": errors
+                        })
+
+                    # Pausa para respeitar as quotas de requisições por minuto do Google Fotos
+                    if self.request_delay > 0:
+                        time.sleep(self.request_delay)
+
                     break
 
-                errors += 1
-                self.db.mark_asset_failed(asset_id, filename, error_msg)
-                if log_fn:
-                    log_fn(f"❌ Erro ao transferir '{filename}': {error_msg}")
+                except DailyQuotaExceededError:
+                    self.wait_for_daily_quota(log_fn=log_fn)
+                    # Continua o loop 'while True' para tentar este mesmo arquivo logo após as 05:05!
 
-                if on_progress:
-                    on_progress({
-                        "status": "failed",
-                        "asset_id": asset_id,
-                        "filename": filename,
-                        "error": error_msg,
-                        "processed": processed,
-                        "skipped": skipped,
-                        "errors": errors
-                    })
+                except Exception as e:
+                    errors += 1
+                    error_msg = str(e)
+                    self.db.mark_asset_failed(asset_id, filename, error_msg)
+                    if log_fn:
+                        log_fn(f"❌ Erro ao transferir '{filename}': {error_msg}")
+
+                    if on_progress:
+                        on_progress({
+                            "status": "failed",
+                            "asset_id": asset_id,
+                            "filename": filename,
+                            "error": error_msg,
+                            "processed": processed,
+                            "skipped": skipped,
+                            "errors": errors
+                        })
+                    break
 
         if log_fn:
             log_fn(f"🎉 Migração de arquivos finalizada! Transferidos: {processed}, Já existentes: {skipped}, Falhas: {errors}")
