@@ -85,6 +85,16 @@ class GooglePhotosClient:
                 except Exception:
                     error_msg = res.text[:200]
 
+                # Se for limite DIÁRIO de 10.000 requisições (não adianta esperar 90 segundos)
+                if "per day" in error_msg.lower():
+                    self._log(
+                        f"\n🛑 [COTA DIÁRIA ATINGIDA] O Google atingiu o limite de 10.000 requisições por dia deste projeto!\n"
+                        f"   Mensagem do Google: {error_msg}\n"
+                        f"   ⏰ O Google renova essa cota automaticamente à meia-noite PST (por volta das 05:00 no Brasil).\n"
+                        f"   💡 Alternativa imediata: Você pode criar um novo projeto gratuito no Google Cloud e trocar o 'credentials.json' para continuar na hora!\n"
+                    )
+                    res.raise_for_status()
+
                 if attempt == max_retries:
                     self._log(f"❌ Limite de tentativas atingido ({max_retries}) para {url}: {error_msg}")
                     res.raise_for_status()

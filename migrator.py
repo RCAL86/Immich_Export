@@ -237,8 +237,17 @@ class ImmichToGooglePhotosMigrator:
                     time.sleep(self.request_delay)
 
             except Exception as e:
-                errors += 1
                 error_msg = str(e)
+                if "per day" in error_msg.lower():
+                    if log_fn:
+                        log_fn(
+                            "\n⏸️ [PAUSA AUTOMÁTICA] Limite diário de requisições do Google atingido.\n"
+                            "   Tudo o que já foi enviado está 100% seguro no banco de dados.\n"
+                            "   Assim que a cota renovar pelo Google (ou trocando o credentials.json), basta rodar 'python main.py sync' para continuar exatamente de onde parou!"
+                        )
+                    break
+
+                errors += 1
                 self.db.mark_asset_failed(asset_id, filename, error_msg)
                 if log_fn:
                     log_fn(f"❌ Erro ao transferir '{filename}': {error_msg}")
